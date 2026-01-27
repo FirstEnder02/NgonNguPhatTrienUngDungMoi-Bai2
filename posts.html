@@ -14,11 +14,30 @@
     form { margin-bottom: 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     input[type="text"], input[type="number"] { padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; }
     input[type="submit"], button { padding: 6px 10px; border-radius: 4px; border: 1px solid #888; background: #f3f3f3; cursor: pointer; }
-    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-    th, td { padding: 8px 10px; border: 1px solid #e0e0e0; text-align: left; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      table-layout: fixed;
+    }
+    th, td {
+      padding: 8px 10px;
+      border: 1px solid #e0e0e0;
+      text-align: left;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    th.id, td.id { width: 60px; }
+    th.title, td.title { width: auto; }
+    th.views, td.views { width: 200px; }
+    th.actions, td.actions { width: 160px; text-align: right; }
     tr:hover { background: #fafafa; }
     .actions button { margin-right: 6px; }
     .error { color: #b00020; }
+    /* small edit panel styling */
+    #edit-panel { border: 1px solid #ddd; padding: 10px; border-radius: 6px; margin-bottom: 12px; display: none; background: #fafafa; }
+    #edit-panel label { display:inline-flex; flex-direction:column; margin-right: 8px; }
   </style>
 </head>
 <body>
@@ -33,31 +52,51 @@
 
   <main>
     <h1>Posts</h1>
-      <form id="post-form" onsubmit="return Save();">
-        <label for="id_display" id="id_label" style="display:none">ID</label>
-        <div id="id_display" style="display:none">
-          <input id="id_readonly" type="text" readonly style="padding:6px 8px; border:1px solid #ccc; border-radius:4px; width:120px;" />
-          <button type="button" id="editIdBtn" style="margin-left:8px; padding:6px 8px;">Change ID</button>
-        </div>
-        <input id="id_edit" name="id" type="text" placeholder="New ID" style="display:none; padding:6px 8px; border:1px solid #ccc; border-radius:4px; width:120px;" />
 
-        <label for="title_txt">Title</label>
-        <input id="title_txt" name="title" type="text" placeholder="Post title" required />
+    <!-- Add form (unchanged) -->
+    <form id="post-form" onsubmit="return Save();">
+      <label for="id_display" id="id_label" style="display:none">ID</label>
+      <div id="id_display" style="display:none">
+        <input id="id_readonly" type="text" readonly style="padding:6px 8px; border:1px solid #ccc; border-radius:4px; width:120px;" />
+      </div>
+      <input id="id_edit" name="id" type="text" placeholder="New ID" style="display:none; padding:6px 8px; border:1px solid #ccc; border-radius:4px; width:120px;" />
 
-        <label for="views_txt">Views</label>
-        <input id="views_txt" name="views" type="number" min="0" placeholder="0" required />
+      <label for="title_txt">Title</label>
+      <input id="title_txt" name="title" type="text" placeholder="Post title" required />
 
-        <input type="submit" value="Save" />
-        <button type="button" id="clearBtn">Clear</button>
-        <span id="msg" class="error" aria-live="polite"></span>
-      </form>
+      <label for="views_txt">Views</label>
+      <input id="views_txt" name="views" type="number" min="0" placeholder="0" required />
+
+      <input type="submit" value="Save" />
+      <button type="button" id="clearBtn">Clear</button>
+      <span id="msg" class="error" aria-live="polite"></span>
+    </form>
+
+    <!-- Edit panel: appears when user clicks Edit on a row -->
+    <div id="edit-panel" aria-hidden="true">
+      <div><strong>Editing ID:</strong> <span id="edit_id_display"></span></div>
+      <div style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <label>
+          Title
+          <input id="edit_title" type="text" style="min-width:220px;" />
+        </label>
+        <label>
+          Views
+          <input id="edit_views" type="number" min="0" style="width:100px;" />
+        </label>
+        <button type="button" id="editSaveBtn">Save Edit</button>
+        <button type="button" id="editCancelBtn">Cancel</button>
+      </div>
+      <div id="edit-msg" class="error" aria-live="polite" style="margin-top:6px;"></div>
+    </div>
+
     <table>
       <thead>
         <tr>
-          <th>ID</th>
-          <th>Title</th>
-          <th>Views</th>
-          <th>Actions</th>
+          <th class="id">ID</th>
+          <th class="title">Title</th>
+          <th class="views">Views</th>
+          <th class="actions">Actions</th>
         </tr>
       </thead>
       <tbody id="body-table"></tbody>

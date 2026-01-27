@@ -4,7 +4,10 @@ const COMMENTS_API = `${API_ORIGIN}/comments`;
 const PROFILE_API = `${API_ORIGIN}/profile`;
 
 let maxID = 0;
+// currentEditingId is used for inline editing only
 let currentEditingId = '';
+let editingRowEl = null;
+let editingRowOriginalHTML = '';
 
 console.log('main.js loaded');
 
@@ -16,9 +19,87 @@ function clearMessage() {
   const el = document.getElementById('msg');
   if (el) el.textContent = '';
 }
+function showEditMessage(text) {
+  const el = document.getElementById('edit-msg');
+  if (el) el.textContent = text;
+}
+function clearEditMessage() {
+  const el = document.getElementById('edit-msg');
+  if (el) el.textContent = '';
+}
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]);
 }
+
+function setClearBtnLabel(label) {
+  const btn = document.getElementById('clearBtn');
+  if (btn) btn.textContent = label;
+}
+function isEditingInline() {
+  return Boolean(editingRowEl);
+}
+function beginInlineEdit(rowEl, post) {
+  if (isEditingInline()) cancelInlineEdit();
+
+  editingRowEl = rowEl;
+  editingRowOriginalHTML = rowEl.innerHTML;
+  currentEditingId = String(post.id);
+
+  rowEl.innerHTML = `
+  <td class="id">${escapeHtml(currentEditingId)}</td>
+  <td class="title"><input type="text" id="inline_title" value="${escapeHtml(post.title ?? '')}" style="width:95%; min-width:80px; max-width:95%; box-sizing:border-box;"></td>
+  <td class="views"><input type="number" id="inline_views" min="0" value="${escapeHtml(String(post.views ?? 0))}" style="width:90%"></td>
+  <td class="actions">
+    <button data-action="inline-save" data-id="${escapeHtml(currentEditingId)}">Save</button>
+    <button data-action="inline-cancel" data-id="${escapeHtml(currentEditingId)}">Cancel</button>
+  </td>
+`;
+  setClearBtnLabel('Exit');
+  const t = rowEl.querySelector('#inline_title');
+  if (t) t.focus();
+}
+
+function cancelInlineEdit() {
+  if (!isEditingInline()) return;
+  editingRowEl.innerHTML = editingRowOriginalHTML;
+  editingRowEl = null;
+  editingRowOriginalHTML = '';
+  currentEditingId = '';
+  setClearBtnLabel('Clear');
+}
+
+async function saveInlineEdit(id) {
+  if (!isEditingInline() || String(id) !== currentEditingId) return;
+  clearEditMessage();
+
+  const titleEl = editingRowEl.querySelector('#inline_title');
+  const viewsEl = editingRowEl.querySelector('#inline_views');
+  if (!titleEl || !viewsEl) { showEditMessage('Edit form elements missing.'); return; }
+
+  const title = titleEl.value.trim();
+  const viewsRaw = viewsEl.value;
+  const views = viewsRaw === '' ? 0 : Number(viewsRaw);
+  if (!title) { showEditMessage('Title is required.'); return; }
+  if (!Number.isFinite(views) || views < 0) { showEditMessage('Views must be a non-negative number.'); return; }
+
+  try {
+    const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, title, views })
+    });
+    if (!res.ok) {
+      showEditMessage(`Update failed: ${res.status}`);
+      return;
+    }
+  } catch (err) {
+    console.error('saveInlineEdit error', err);
+    showEditMessage('Network error while saving edit.');
+    return;
+  }
+  await GetData();
+  setClearBtnLabel('Clear');
+} 
 async function GetData() {
   console.log('GetData start');
   try {
@@ -36,8 +117,14 @@ async function GetData() {
     if (!bodyTable) { console.error('body-table not found'); return; }
     bodyTable.innerHTML = '';
     for (const post of posts) bodyTable.innerHTML += convertObjToHTML(post);
-    currentEditingId = '';
-    hideIdControls();
+    if (isEditingInline()) {
+      editingRowEl = null;
+      editingRowOriginalHTML = '';
+      currentEditingId = '';
+    }
+    const idDisplay = document.getElementById('id_display');
+    if (idDisplay) idDisplay.textContent = '';
+    setClearBtnLabel('Clear');
 
     clearMessage();
     console.log('table updated, maxID=', maxID);
@@ -47,47 +134,31 @@ async function GetData() {
     showMessage('Network error while loading posts.');
   }
 }
-function showIdControls(idValue) {
-  const idLabel = document.getElementById('id_label');
-  const idDisplay = document.getElementById('id_display');
-  const idReadonly = document.getElementById('id_readonly');
-  const idEdit = document.getElementById('id_edit');
-  if (idLabel) idLabel.style.display = '';
-  if (idDisplay) idDisplay.style.display = '';
-  if (idReadonly) idReadonly.value = idValue ?? '';
-  if (idEdit) { idEdit.style.display = 'none'; idEdit.value = ''; }
-  const editBtn = document.getElementById('editIdBtn');
-  if (editBtn) editBtn.textContent = 'Change ID';
-}
-
-function hideIdControls() {
-  const idLabel = document.getElementById('id_label');
-  const idDisplay = document.getElementById('id_display');
-  const idEdit = document.getElementById('id_edit');
-  if (idLabel) idLabel.style.display = 'none';
-  if (idDisplay) idDisplay.style.display = 'none';
-  if (idEdit) { idEdit.style.display = 'none'; idEdit.value = ''; }
-  currentEditingId = '';
-}
 function populateForm(id) {
   clearMessage();
+  const editBtn = document.querySelector(`button[data-action="edit"][data-id="${CSS.escape(String(id))}"]`);
+  const row = editBtn ? editBtn.closest('tr') : null;
+  if (!row) {
+    fetch(`${API_BASE}/${encodeURIComponent(id)}`)
+      .then(r => { if (!r.ok) throw new Error(`Not found ${r.status}`); return r.json(); })
+      .then(post => {
+        const btn = document.querySelector(`button[data-action="edit"][data-id="${CSS.escape(String(id))}"]`);
+        const r2 = btn ? btn.closest('tr') : null;
+        if (r2) beginInlineEdit(r2, post);
+      })
+      .catch(err => { console.error(err); showMessage('Could not load post for editing.'); });
+    return;
+  }
+
   fetch(`${API_BASE}/${encodeURIComponent(id)}`)
     .then(r => { if (!r.ok) throw new Error(`Not found ${r.status}`); return r.json(); })
-    .then(post => {
-      currentEditingId = String(post.id);
-      showIdControls(currentEditingId);
-
-      document.getElementById('title_txt').value = post.title ?? '';
-      document.getElementById('views_txt').value = post.views ?? 0;
-      document.getElementById('title_txt').focus();
-    })
+    .then(post => beginInlineEdit(row, post))
     .catch(err => { console.error(err); showMessage('Could not load post for editing.'); });
 }
 async function Save() {
   clearMessage();
   const titleEl = document.getElementById('title_txt');
   const viewsEl = document.getElementById('views_txt');
-  const idEditEl = document.getElementById('id_edit');
   if (!titleEl || !viewsEl) { showMessage('Form elements missing.'); return false; }
 
   const title = titleEl.value.trim();
@@ -97,58 +168,27 @@ async function Save() {
   if (!Number.isFinite(views) || views < 0) { showMessage('Views must be a non-negative number.'); return false; }
 
   try {
-    let targetId = '';
-    let idChanged = false;
+    const targetId = String(maxID + 1);
+    const allRes = await fetch(API_BASE);
+    if (!allRes.ok) { showMessage(`Failed to fetch posts for ID check: ${allRes.status}`); return false; }
+    const allPosts = await allRes.json();
+    const exists = allPosts.some(p => String(p.id) === targetId);
+    if (exists) {
+      showMessage(`ID "${targetId}" already exists. Choose a different ID.`);
+      return false;
+    }
 
-    if (currentEditingId) {
-      if (idEditEl && idEditEl.style.display !== 'none' && idEditEl.value.trim() !== '') {
-        targetId = idEditEl.value.trim();
-        if (targetId === '') { showMessage('ID cannot be empty.'); return false; }
-        if (targetId !== currentEditingId) idChanged = true;
-      } else {
-        targetId = currentEditingId;
-      }
-    } else {
-      targetId = String(maxID + 1);
-    }
-    if (!currentEditingId || idChanged) {
-      const allRes = await fetch(API_BASE);
-      if (!allRes.ok) { showMessage(`Failed to fetch posts for ID check: ${allRes.status}`); return false; }
-      const allPosts = await allRes.json();
-      const exists = allPosts.some(p => String(p.id) === String(targetId));
-      if (exists) {
-        showMessage(`ID "${targetId}" already exists. Choose a different ID.`);
-        return false;
-      }
-    }
-    if (currentEditingId && idChanged) {
-      const createRes = await fetch(API_BASE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: targetId, title, views })
-      });
-      if (!createRes.ok) { showMessage(`Create with new ID failed: ${createRes.status}`); return false; }
-      const delRes = await fetch(`${API_BASE}/${encodeURIComponent(currentEditingId)}`, { method: "DELETE" });
-      if (!delRes.ok) { showMessage(`Warning: created new post but failed to delete old ID: ${delRes.status}`); }
-      const numeric = Number(targetId);
-      if (Number.isFinite(numeric) && numeric > maxID) maxID = numeric;
-    } else if (currentEditingId && !idChanged) {
-      const res = await fetch(`${API_BASE}/${encodeURIComponent(targetId)}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: targetId, title, views })
-      });
-      if (!res.ok) showMessage(`Update failed: ${res.status}`);
-    } else {
-      const res = await fetch(API_BASE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: targetId, title, views })
-      });
-      if (!res.ok) { showMessage(`Create failed: ${res.status}`); return false; }
-      const numeric = Number(targetId);
-      if (Number.isFinite(numeric) && numeric > maxID) maxID = numeric;
-    }
+    const res = await fetch(API_BASE, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: targetId, title, views })
+    });
+    if (!res.ok) { showMessage(`Create failed: ${res.status}`); return false; }
+    const numeric = Number(targetId);
+    if (Number.isFinite(numeric) && numeric > maxID) maxID = numeric;
+    const form = document.getElementById('post-form');
+    if (form) form.reset();
+    setClearBtnLabel('Clear');
   } catch (error) {
     console.error('Save error', error);
     showMessage('Network error while saving.');
@@ -156,6 +196,9 @@ async function Save() {
 
   await GetData();
   return false;
+}
+async function SaveEdit() {
+  return;
 }
 async function Delete(id) {
   clearMessage();
@@ -170,31 +213,33 @@ async function Delete(id) {
   }
   return false;
 }
+
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM ready');
   const clearBtn = document.getElementById('clearBtn');
-  if (clearBtn) clearBtn.addEventListener('click', () => {
-    const form = document.getElementById('post-form');
-    if (form) form.reset();
-    hideIdControls();
-    clearMessage();
-  });
-  const editIdBtn = document.getElementById('editIdBtn');
-  const idEditEl = document.getElementById('id_edit');
-  if (editIdBtn && idEditEl) {
-    editIdBtn.addEventListener('click', () => {
-      if (idEditEl.style.display === 'none' || idEditEl.style.display === '') {
-        idEditEl.style.display = '';
-        const idReadonly = document.getElementById('id_readonly');
-        idEditEl.value = idReadonly ? idReadonly.value : '';
-        editIdBtn.textContent = 'Cancel';
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      if (isEditingInline()) {
+        cancelInlineEdit();
+        clearEditMessage();
       } else {
-        idEditEl.style.display = 'none';
-        idEditEl.value = '';
-        editIdBtn.textContent = 'Change ID';
+        const form = document.getElementById('post-form');
+        if (form) form.reset();
+        const idDisplay = document.getElementById('id_display');
+        if (idDisplay) idDisplay.textContent = '';
+        clearMessage();
       }
     });
   }
+  const editSaveBtn = document.getElementById('editSaveBtn');
+  if (editSaveBtn) editSaveBtn.addEventListener('click', SaveEdit);
+  const editCancelBtn = document.getElementById('editCancelBtn');
+  if (editCancelBtn) editCancelBtn.addEventListener('click', () => {
+    // hide panel fallback
+    const panel = document.getElementById('edit-panel');
+    if (panel) { panel.style.display = 'none'; panel.setAttribute('aria-hidden', 'true'); }
+  });
+
   const bodyTable = document.getElementById('body-table');
   if (bodyTable) {
     bodyTable.addEventListener('click', (e) => {
@@ -202,8 +247,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!btn) return;
       const action = btn.getAttribute('data-action');
       const id = btn.getAttribute('data-id');
+
       if (action === 'edit') populateForm(id);
-      if (action === 'delete') Delete(id);
+      else if (action === 'delete') Delete(id);
+      else if (action === 'inline-save') saveInlineEdit(id);
+      else if (action === 'inline-cancel') cancelInlineEdit();
     });
   }
   if (document.getElementById('body-table')) {
@@ -215,15 +263,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   loadHeaderCounts();
 });
+
 function convertObjToHTML(post) {
   return `
     <tr>
-      <td>${post.id}</td>
-      <td>${escapeHtml(post.title)}</td>
-      <td>${post.views}</td>
+      <td class="id">${escapeHtml(String(post.id))}</td>
+      <td class="title">${escapeHtml(post.title)}</td>
+      <td class="views">${escapeHtml(String(post.views))}</td>
       <td class="actions">
-        <button data-action="edit" data-id="${post.id}">Edit</button>
-        <button data-action="delete" data-id="${post.id}">Delete</button>
+        <button data-action="edit" data-id="${escapeHtml(String(post.id))}">Edit</button>
+        <button data-action="delete" data-id="${escapeHtml(String(post.id))}">Delete</button>
       </td>
     </tr>
   `;
