@@ -1,9 +1,8 @@
-# NNPTUD-S2
-
+NNPTUD-S2
 # MSSV:   2280601248
 # Tên:    Trần Hậu Huy
 
-# https://github.com/nguyenthanhtunghutechsg/NNPTUD-S2/tree/20260126
+https://github.com/nguyenthanhtunghutechsg/NNPTUD-S2/tree/20260126
 
 1) mở terminal và gõ : npm install json-server
 2) tạo file db.json và thêm nội dung sau :
@@ -28,3 +27,10 @@
 - Làm ID tự tăng bằng với maxId +1 khi tạo (mới khi tạo mới thì bỏ trống ID), ID lưu trong CSDL là chuỗi 
 - Hiển thị các post xoá mềm và sử dụng gạch ngang (thay đổi cách hiển thị) cho các post đó
 - Thực hiện toàn bộ thao tác CRUD với comments
+
+Khởi chạy API trên port 3000:
+npx json-server db.json
+
+Mở terminal mới
+Khởi chạy file trên địa chỉ 127.0.0.1:8080:
+npx http-server . -p 8080
