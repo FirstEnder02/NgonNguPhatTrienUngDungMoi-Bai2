@@ -33,22 +33,24 @@
 
   <main>
     <h1>Posts</h1>
+      <form id="post-form" onsubmit="return Save();">
+        <label for="id_display" id="id_label" style="display:none">ID</label>
+        <div id="id_display" style="display:none">
+          <input id="id_readonly" type="text" readonly style="padding:6px 8px; border:1px solid #ccc; border-radius:4px; width:120px;" />
+          <button type="button" id="editIdBtn" style="margin-left:8px; padding:6px 8px;">Change ID</button>
+        </div>
+        <input id="id_edit" name="id" type="text" placeholder="New ID" style="display:none; padding:6px 8px; border:1px solid #ccc; border-radius:4px; width:120px;" />
 
-    <form id="post-form" onsubmit="return Save();">
-      <label for="id_txt">ID</label>
-      <input id="id_txt" name="id" type="text" placeholder="e.g. 3" />
+        <label for="title_txt">Title</label>
+        <input id="title_txt" name="title" type="text" placeholder="Post title" required />
 
-      <label for="title_txt">Title</label>
-      <input id="title_txt" name="title" type="text" placeholder="Post title" required />
+        <label for="views_txt">Views</label>
+        <input id="views_txt" name="views" type="number" min="0" placeholder="0" required />
 
-      <label for="views_txt">Views</label>
-      <input id="views_txt" name="views" type="number" min="0" placeholder="0" required />
-
-      <input type="submit" value="Save" />
-      <button type="button" id="clearBtn">Clear</button>
-      <span id="msg" class="error" aria-live="polite"></span>
-    </form>
-
+        <input type="submit" value="Save" />
+        <button type="button" id="clearBtn">Clear</button>
+        <span id="msg" class="error" aria-live="polite"></span>
+      </form>
     <table>
       <thead>
         <tr>
