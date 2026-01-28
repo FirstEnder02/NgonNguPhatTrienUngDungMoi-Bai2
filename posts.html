@@ -35,7 +35,6 @@
     tr:hover { background: #fafafa; }
     .actions button { margin-right: 6px; }
     .error { color: #b00020; }
-    /* small edit panel styling */
     #edit-panel { border: 1px solid #ddd; padding: 10px; border-radius: 6px; margin-bottom: 12px; display: none; background: #fafafa; }
     #edit-panel label { display:inline-flex; flex-direction:column; margin-right: 8px; }
   </style>
@@ -53,7 +52,6 @@
   <main>
     <h1>Posts</h1>
 
-    <!-- Add form (unchanged) -->
     <form id="post-form" onsubmit="return Save();">
       <label for="id_display" id="id_label" style="display:none">ID</label>
       <div id="id_display" style="display:none">
@@ -72,7 +70,6 @@
       <span id="msg" class="error" aria-live="polite"></span>
     </form>
 
-    <!-- Edit panel: appears when user clicks Edit on a row -->
     <div id="edit-panel" aria-hidden="true">
       <div><strong>Editing ID:</strong> <span id="edit_id_display"></span></div>
       <div style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">

@@ -1,286 +1,251 @@
-const API_BASE = 'http://127.0.0.1:3000/posts';
-const API_ORIGIN = (new URL(API_BASE)).origin;
-const COMMENTS_API = `${API_ORIGIN}/comments`;
-const PROFILE_API = `${API_ORIGIN}/profile`;
+const API_BASE = 'http://localhost:3000';
+const POSTS_ENDPOINT = `${API_BASE}/posts`;
 
-let maxID = 0;
-// currentEditingId is used for inline editing only
-let currentEditingId = '';
-let editingRowEl = null;
-let editingRowOriginalHTML = '';
-
-console.log('main.js loaded');
-
-function showMessage(text) {
-  const el = document.getElementById('msg');
-  if (el) el.textContent = text;
-}
-function clearMessage() {
-  const el = document.getElementById('msg');
-  if (el) el.textContent = '';
-}
-function showEditMessage(text) {
-  const el = document.getElementById('edit-msg');
-  if (el) el.textContent = text;
-}
-function clearEditMessage() {
-  const el = document.getElementById('edit-msg');
-  if (el) el.textContent = '';
-}
-function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]);
-}
-
-function setClearBtnLabel(label) {
-  const btn = document.getElementById('clearBtn');
-  if (btn) btn.textContent = label;
-}
-function isEditingInline() {
-  return Boolean(editingRowEl);
-}
-function beginInlineEdit(rowEl, post) {
-  if (isEditingInline()) cancelInlineEdit();
-
-  editingRowEl = rowEl;
-  editingRowOriginalHTML = rowEl.innerHTML;
-  currentEditingId = String(post.id);
-
-  rowEl.innerHTML = `
-  <td class="id">${escapeHtml(currentEditingId)}</td>
-  <td class="title"><input type="text" id="inline_title" value="${escapeHtml(post.title ?? '')}" style="width:95%; min-width:80px; max-width:95%; box-sizing:border-box;"></td>
-  <td class="views"><input type="number" id="inline_views" min="0" value="${escapeHtml(String(post.views ?? 0))}" style="width:90%"></td>
-  <td class="actions">
-    <button data-action="inline-save" data-id="${escapeHtml(currentEditingId)}">Save</button>
-    <button data-action="inline-cancel" data-id="${escapeHtml(currentEditingId)}">Cancel</button>
-  </td>
-`;
-  setClearBtnLabel('Exit');
-  const t = rowEl.querySelector('#inline_title');
-  if (t) t.focus();
-}
-
-function cancelInlineEdit() {
-  if (!isEditingInline()) return;
-  editingRowEl.innerHTML = editingRowOriginalHTML;
-  editingRowEl = null;
-  editingRowOriginalHTML = '';
-  currentEditingId = '';
-  setClearBtnLabel('Clear');
-}
-
-async function saveInlineEdit(id) {
-  if (!isEditingInline() || String(id) !== currentEditingId) return;
-  clearEditMessage();
-
-  const titleEl = editingRowEl.querySelector('#inline_title');
-  const viewsEl = editingRowEl.querySelector('#inline_views');
-  if (!titleEl || !viewsEl) { showEditMessage('Edit form elements missing.'); return; }
-
-  const title = titleEl.value.trim();
-  const viewsRaw = viewsEl.value;
-  const views = viewsRaw === '' ? 0 : Number(viewsRaw);
-  if (!title) { showEditMessage('Title is required.'); return; }
-  if (!Number.isFinite(views) || views < 0) { showEditMessage('Views must be a non-negative number.'); return; }
-
+async function fetchPosts() {
   try {
-    const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, title, views })
-    });
-    if (!res.ok) {
-      showEditMessage(`Update failed: ${res.status}`);
-      return;
-    }
-  } catch (err) {
-    console.error('saveInlineEdit error', err);
-    showEditMessage('Network error while saving edit.');
-    return;
-  }
-  await GetData();
-  setClearBtnLabel('Clear');
-} 
-async function GetData() {
-  console.log('GetData start');
-  try {
-    const res = await fetch(API_BASE);
-    console.log('fetch status', res.status);
-    if (!res.ok) { showMessage(`Failed to load posts: ${res.status}`); return; }
+    const res = await fetch(POSTS_ENDPOINT);
+    if (!res.ok) throw new Error('Fetch posts failed: ' + res.status);
     const posts = await res.json();
-    maxID = 0;
-    for (const p of posts) {
-      const n = Number(p.id);
-      if (Number.isFinite(n) && n > maxID) maxID = n;
-    }
-
-    const bodyTable = document.getElementById('body-table');
-    if (!bodyTable) { console.error('body-table not found'); return; }
-    bodyTable.innerHTML = '';
-    for (const post of posts) bodyTable.innerHTML += convertObjToHTML(post);
-    if (isEditingInline()) {
-      editingRowEl = null;
-      editingRowOriginalHTML = '';
-      currentEditingId = '';
-    }
-    const idDisplay = document.getElementById('id_display');
-    if (idDisplay) idDisplay.textContent = '';
-    setClearBtnLabel('Clear');
-
-    clearMessage();
-    console.log('table updated, maxID=', maxID);
-    loadHeaderCounts();
+    return Array.isArray(posts) ? posts : [];
   } catch (err) {
-    console.error('GetData error', err);
-    showMessage('Network error while loading posts.');
+    console.error('fetchPosts error', err);
+    return [];
   }
 }
-function populateForm(id) {
-  clearMessage();
-  const editBtn = document.querySelector(`button[data-action="edit"][data-id="${CSS.escape(String(id))}"]`);
-  const row = editBtn ? editBtn.closest('tr') : null;
-  if (!row) {
-    fetch(`${API_BASE}/${encodeURIComponent(id)}`)
-      .then(r => { if (!r.ok) throw new Error(`Not found ${r.status}`); return r.json(); })
-      .then(post => {
-        const btn = document.querySelector(`button[data-action="edit"][data-id="${CSS.escape(String(id))}"]`);
-        const r2 = btn ? btn.closest('tr') : null;
-        if (r2) beginInlineEdit(r2, post);
-      })
-      .catch(err => { console.error(err); showMessage('Could not load post for editing.'); });
+
+async function createPost(formData) {
+  const posts = await fetchPosts();
+  const maxId = posts.reduce((max, p) => {
+    const n = parseInt(p.id || '0', 10);
+    return n > max ? n : max;
+  }, 0);
+
+  const newId = (!formData.id || String(formData.id).trim() === '') ? String(maxId + 1) : String(formData.id);
+
+  const newPost = {
+    id: newId,
+    title: formData.title || '',
+    views: Number(formData.views || 0),
+    isDeleted: false
+  };
+
+  try {
+    const res = await fetch(POSTS_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newPost)
+    });
+    if (!res.ok) throw new Error('Create post failed: ' + res.status);
+    return await res.json();
+  } catch (err) {
+    console.error('createPost error', err);
+    throw err;
+  }
+}
+
+async function patchPost(id, patchObj) {
+  try {
+    const res = await fetch(`${POSTS_ENDPOINT}/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patchObj)
+    });
+    if (!res.ok) throw new Error('Patch failed: ' + res.status);
+    return await res.json();
+  } catch (err) {
+    console.error('patchPost error', err);
+    throw err;
+  }
+}
+
+async function softDeletePost(id) {
+  try {
+    await patchPost(id, { isDeleted: true });
+    await refreshAndRender();
+  } catch (err) {
+    console.error('softDeletePost', err);
+  }
+}
+
+async function restorePost(id) {
+  try {
+    await patchPost(id, { isDeleted: false });
+    await refreshAndRender();
+  } catch (err) {
+    console.error('restorePost', err);
+  }
+}
+function formatCellText(text) {
+  return String(text == null ? '' : text);
+}
+
+function renderPosts(posts) {
+  const tbody = document.getElementById('body-table');
+  if (!tbody) {
+    console.error('Missing #body-table element');
     return;
   }
+  tbody.innerHTML = '';
 
-  fetch(`${API_BASE}/${encodeURIComponent(id)}`)
-    .then(r => { if (!r.ok) throw new Error(`Not found ${r.status}`); return r.json(); })
-    .then(post => beginInlineEdit(row, post))
-    .catch(err => { console.error(err); showMessage('Could not load post for editing.'); });
+  posts
+    .sort((a, b) => parseInt(a.id || '0', 10) - parseInt(b.id || '0', 10))
+    .forEach(post => {
+      const tr = document.createElement('tr');
+
+      if (post.isDeleted) {
+        tr.classList.add('deleted');
+      }
+
+      const tdId = document.createElement('td');
+      tdId.className = 'id';
+      tdId.textContent = formatCellText(post.id);
+      tr.appendChild(tdId);
+
+      const tdTitle = document.createElement('td');
+      tdTitle.className = 'title';
+      tdTitle.textContent = formatCellText(post.title);
+      tr.appendChild(tdTitle);
+
+      const tdViews = document.createElement('td');
+      tdViews.className = 'views';
+      tdViews.textContent = formatCellText(post.views);
+      tr.appendChild(tdViews);
+
+      const tdActions = document.createElement('td');
+      tdActions.className = 'actions';
+
+      // Edit button (disabled when deleted)
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.textContent = 'Edit';
+      editBtn.disabled = !!post.isDeleted;
+      if (!post.isDeleted) {
+        editBtn.addEventListener('click', () => openEditPanel(post));
+      }
+      tdActions.appendChild(editBtn);
+
+      // Single Delete / Restore button: shows "Delete" when not deleted, "Restore" when deleted
+      const toggleBtn = document.createElement('button');
+      toggleBtn.type = 'button';
+      if (post.isDeleted) {
+        toggleBtn.textContent = 'Restore';
+        toggleBtn.disabled = false;
+        toggleBtn.addEventListener('click', () => restorePost(post.id));
+      } else {
+        toggleBtn.textContent = 'Delete';
+        toggleBtn.disabled = false;
+        toggleBtn.addEventListener('click', () => softDeletePost(post.id));
+      }
+      tdActions.appendChild(toggleBtn);
+
+      tr.appendChild(tdActions);
+      tbody.appendChild(tr);
+    });
 }
+
+
+function openEditPanel(post) {
+  const panel = document.getElementById('edit-panel');
+  if (!panel) return;
+  document.getElementById('edit_id_display').textContent = post.id;
+  document.getElementById('edit_title').value = post.title || '';
+  document.getElementById('edit_views').value = post.views != null ? post.views : 0;
+  panel.style.display = 'block';
+  panel.setAttribute('aria-hidden', 'false');
+  document.getElementById('edit-msg').textContent = '';
+}
+
+function closeEditPanel() {
+  const panel = document.getElementById('edit-panel');
+  if (!panel) return;
+  panel.style.display = 'none';
+  panel.setAttribute('aria-hidden', 'true');
+  document.getElementById('edit-msg').textContent = '';
+}
+
+async function refreshAndRender() {
+  const posts = await fetchPosts();
+  renderPosts(posts);
+}
+
 async function Save() {
-  clearMessage();
+  const msgEl = document.getElementById('msg');
+  if (msgEl) msgEl.textContent = '';
+
+  const idInputEl = document.getElementById('id_edit') || document.getElementById('id_readonly');
   const titleEl = document.getElementById('title_txt');
   const viewsEl = document.getElementById('views_txt');
-  if (!titleEl || !viewsEl) { showMessage('Form elements missing.'); return false; }
 
-  const title = titleEl.value.trim();
-  const viewsRaw = viewsEl.value;
-  const views = viewsRaw === '' ? 0 : Number(viewsRaw);
-  if (!title) { showMessage('Title is required.'); return false; }
-  if (!Number.isFinite(views) || views < 0) { showMessage('Views must be a non-negative number.'); return false; }
+  const idVal = idInputEl ? idInputEl.value : '';
+  const titleVal = titleEl ? titleEl.value.trim() : '';
+  const viewsVal = viewsEl ? Number(viewsEl.value || 0) : 0;
 
-  try {
-    const targetId = String(maxID + 1);
-    const allRes = await fetch(API_BASE);
-    if (!allRes.ok) { showMessage(`Failed to fetch posts for ID check: ${allRes.status}`); return false; }
-    const allPosts = await allRes.json();
-    const exists = allPosts.some(p => String(p.id) === targetId);
-    if (exists) {
-      showMessage(`ID "${targetId}" already exists. Choose a different ID.`);
-      return false;
-    }
-
-    const res = await fetch(API_BASE, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: targetId, title, views })
-    });
-    if (!res.ok) { showMessage(`Create failed: ${res.status}`); return false; }
-    const numeric = Number(targetId);
-    if (Number.isFinite(numeric) && numeric > maxID) maxID = numeric;
-    const form = document.getElementById('post-form');
-    if (form) form.reset();
-    setClearBtnLabel('Clear');
-  } catch (error) {
-    console.error('Save error', error);
-    showMessage('Network error while saving.');
+  if (!titleVal) {
+    if (msgEl) msgEl.textContent = 'Title is required';
+    return false;
   }
 
-  await GetData();
-  return false;
-}
-async function SaveEdit() {
-  return;
-}
-async function Delete(id) {
-  clearMessage();
-  if (!confirm(`Delete post with ID ${id}?`)) return false;
   try {
-    const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}`, { method: "DELETE" });
-    if (!res.ok) showMessage(`Delete failed: ${res.status}`);
-    else await GetData();
-  } catch (error) {
-    console.error('Delete error', error);
-    showMessage('Network error while deleting.');
+    await createPost({ id: idVal, title: titleVal, views: viewsVal });
+    if (idInputEl) idInputEl.value = '';
+    if (titleEl) titleEl.value = '';
+    if (viewsEl) viewsEl.value = '';
+    await refreshAndRender();
+  } catch (err) {
+    console.error('Save error', err);
+    if (msgEl) msgEl.textContent = 'Failed to save post';
   }
+
   return false;
+}
+
+function clearForm() {
+  const idInputEl = document.getElementById('id_edit') || document.getElementById('id_readonly');
+  const titleEl = document.getElementById('title_txt');
+  const viewsEl = document.getElementById('views_txt');
+  if (idInputEl) idInputEl.value = '';
+  if (titleEl) titleEl.value = '';
+  if (viewsEl) viewsEl.value = '';
+  const msgEl = document.getElementById('msg');
+  if (msgEl) msgEl.textContent = '';
+}
+
+async function saveEdit() {
+  const editId = document.getElementById('edit_id_display').textContent;
+  const editTitle = document.getElementById('edit_title').value.trim();
+  const editViews = Number(document.getElementById('edit_views').value || 0);
+  const editMsg = document.getElementById('edit-msg');
+  if (!editTitle) {
+    if (editMsg) editMsg.textContent = 'Title required';
+    return;
+  }
+  try {
+    await patchPost(editId, { title: editTitle, views: editViews });
+    closeEditPanel();
+    await refreshAndRender();
+  } catch (err) {
+    console.error('saveEdit error', err);
+    if (editMsg) editMsg.textContent = 'Save failed';
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('DOM ready');
+  const tbody = document.getElementById('body-table');
+  const form = document.getElementById('post-form');
+
+  if (!tbody && !form) {
+    console.warn('No #body-table and no #post-form on this page — skipping initialization.');
+    return;
+  }
+
   const clearBtn = document.getElementById('clearBtn');
-  if (clearBtn) {
-    clearBtn.addEventListener('click', () => {
-      if (isEditingInline()) {
-        cancelInlineEdit();
-        clearEditMessage();
-      } else {
-        const form = document.getElementById('post-form');
-        if (form) form.reset();
-        const idDisplay = document.getElementById('id_display');
-        if (idDisplay) idDisplay.textContent = '';
-        clearMessage();
-      }
-    });
-  }
+  if (clearBtn) clearBtn.addEventListener('click', clearForm);
+
   const editSaveBtn = document.getElementById('editSaveBtn');
-  if (editSaveBtn) editSaveBtn.addEventListener('click', SaveEdit);
   const editCancelBtn = document.getElementById('editCancelBtn');
-  if (editCancelBtn) editCancelBtn.addEventListener('click', () => {
-    // hide panel fallback
-    const panel = document.getElementById('edit-panel');
-    if (panel) { panel.style.display = 'none'; panel.setAttribute('aria-hidden', 'true'); }
-  });
+  if (editSaveBtn) editSaveBtn.addEventListener('click', saveEdit);
+  if (editCancelBtn) editCancelBtn.addEventListener('click', closeEditPanel);
 
-  const bodyTable = document.getElementById('body-table');
-  if (bodyTable) {
-    bodyTable.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-action]');
-      if (!btn) return;
-      const action = btn.getAttribute('data-action');
-      const id = btn.getAttribute('data-id');
-
-      if (action === 'edit') populateForm(id);
-      else if (action === 'delete') Delete(id);
-      else if (action === 'inline-save') saveInlineEdit(id);
-      else if (action === 'inline-cancel') cancelInlineEdit();
-    });
-  }
-  if (document.getElementById('body-table')) {
-    GetData();
-  } else if (document.getElementById('comments-table')) {
-    loadComments();
-  } else if (document.getElementById('profile-name')) {
-    loadProfile();
-  }
-  loadHeaderCounts();
+  if (tbody) refreshAndRender();
 });
-
-function convertObjToHTML(post) {
-  return `
-    <tr>
-      <td class="id">${escapeHtml(String(post.id))}</td>
-      <td class="title">${escapeHtml(post.title)}</td>
-      <td class="views">${escapeHtml(String(post.views))}</td>
-      <td class="actions">
-        <button data-action="edit" data-id="${escapeHtml(String(post.id))}">Edit</button>
-        <button data-action="delete" data-id="${escapeHtml(String(post.id))}">Delete</button>
-      </td>
-    </tr>
-  `;
-}
-async function loadHeaderCounts() {
-  try {
-    const postsRes = await fetch(API_BASE);
-  } catch (err) {
-    console.error('loadHeaderCounts error', err);
-  }
-}
+window.Save = Save;
