@@ -1,0 +1,16 @@
+<header class="topbar" role="banner">
+  <div class="brand">Posts Manager</div>
+  <nav class="nav" role="navigation" aria-label="Main">
+    <a href="posts.html" data-nav="posts">Posts</a>
+    <a href="comments.html" data-nav="comments">Comments</a>
+    <a href="profile.html" data-nav="profile">Profile</a>
+  </nav>
+</header>
+
+<style>
+  .topbar { display:flex; gap:12px; align-items:center; margin-bottom:18px; }
+  .brand { font-weight:700; font-size:1.25rem; margin-right:16px; }
+  .nav { display:flex; gap:8px; }
+  .nav a { text-decoration:none; padding:8px 12px; border-radius:8px; border:1px solid #ddd; color:inherit; background:#fff; }
+  .nav a.active { background:#0078d4; color:#fff; border-color:#0063b1; }
+</style>

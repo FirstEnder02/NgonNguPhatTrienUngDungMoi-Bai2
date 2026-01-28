@@ -1,0 +1,10 @@
+/* posts-common.css - import into each page or include in a shared stylesheet */
+table { width:100%; border-collapse:collapse; }
+th, td { padding:8px 10px; border:1px solid #e0e0e0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+tr.deleted { background:#fff8f8; }
+tr.deleted td.id, tr.deleted td.title, tr.deleted td.views {
+  text-decoration: line-through;
+  color: #6b6b6b;
+  opacity: 0.85;
+}
+tr.deleted td.actions button { text-decoration:none; opacity:1; }
