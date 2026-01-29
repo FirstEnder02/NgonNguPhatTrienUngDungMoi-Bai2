@@ -31,13 +31,25 @@
       "id": "1",
       "text": "a comment about post 1",
       "postId": "1",
-      "isDeleted": true
+      "isDeleted": false
     },
     {
       "id": "2",
       "text": "another comment about post 1",
       "postId": "1",
       "isDeleted": false
+    },
+    {
+      "id": "3",
+      "text": "Aren't i just that funny?",
+      "postId": "2",
+      "isDeleted": false
+    },
+    {
+      "id": "4",
+      "text": "This sucks",
+      "postId": "4",
+      "isDeleted": true
     }
   ],
   "profile": {

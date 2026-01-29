@@ -4,25 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Posts Manager — Profile</title>
-  <style>
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin: 24px; }
-    .topbar { display:flex; gap:12px; align-items:center; margin-bottom:18px; }
-    .brand { font-weight:700; font-size:1.25rem; margin-right:16px; }
-    .nav { display:flex; gap:8px; }
-    .nav a { text-decoration:none; padding:8px 12px; border-radius:8px; border:1px solid #ddd; color:inherit; background:#fff; }
-    .nav a.active { background:#0078d4; color:#fff; border-color:#0063b1; }
-    .profile-card { border:1px solid #e0e0e0; padding:12px; border-radius:8px; max-width:420px; background:#fff; }
-  </style>
+  <link rel="stylesheet" href="Kaboom/shared.css">
 </head>
 <body>
-  <header class="topbar" role="banner">
-    <div class="brand">Posts Manager</div>
-    <nav class="nav" role="navigation" aria-label="Main">
-      <a href="posts.html">Posts</a>
-      <a href="comments.html">Comments</a>
-      <a href="profile.html" class="active">Profile</a>
-    </nav>
-  </header>
+  <div id="site-header"></div>
+  <script src="Kaboom/header-loader.js"></script>
+  <div id="site-header"></div>
+  <script src="Kaboom/header-loader.js"></script>
 
   <main>
     <h1>Profile</h1>

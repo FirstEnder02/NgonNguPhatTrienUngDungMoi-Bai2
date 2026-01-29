@@ -1,0 +1,400 @@
+<script>
+(function () {
+  const whatsBtn = document.getElementById('whats-this-btn');
+  const resetBtn = document.getElementById('reset-ragdoll-btn');
+  const footer = document.getElementById('ragdoll-footer');
+
+  // Tuned for more bouncy behavior
+  const GRAVITY = 1400;
+  const FRICTION = 0.999;
+  const BOUNCE = 0.85;
+  const MAX_PIECE_AREA = 16000;
+
+  let overlay = null;
+  let pieces = [];
+  let rafId = null;
+  let lastTime = 0;
+  let hiddenNodes = [];
+
+  let lastViewport = { w: window.innerWidth, h: window.innerHeight, scrollY: window.scrollY };
+
+  let lastScreenPos = { x: window.screenX || 0, y: window.screenY || 0 };
+  let screenPollInterval = null;
+  const SCREEN_POLL_MS = 30;
+
+  function createOverlay() {
+    overlay = document.createElement('div');
+    overlay.className = 'ragdoll-overlay';
+    overlay.style.zIndex = 99998;
+    document.body.appendChild(overlay);
+  }
+
+  function snapshotNodes() {
+    return Array.from(document.body.children).filter(n => n !== footer && n !== overlay);
+  }
+
+  function makePiecesForNode(node) {
+    const rect = node.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return [];
+
+    const area = rect.width * rect.height;
+    let cols = 1, rows = 1;
+    if (area > MAX_PIECE_AREA) {
+      const ratio = rect.width / rect.height;
+      const approx = Math.ceil(area / MAX_PIECE_AREA);
+      cols = Math.max(1, Math.round(Math.sqrt(approx * ratio)));
+      rows = Math.max(1, Math.round(Math.sqrt(approx / ratio)));
+    }
+
+    const nodePieces = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const piece = document.createElement('div');
+        piece.className = 'ragdoll-piece';
+
+        const pieceW = rect.width / cols;
+        const pieceH = rect.height / rows;
+        const left = rect.left + c * pieceW;
+        const top = rect.top + r * pieceH;
+
+        piece.style.left = `${left}px`;
+        piece.style.top = `${top}px`;
+        piece.style.width = `${pieceW}px`;
+        piece.style.height = `${pieceH}px`;
+        piece.style.overflow = 'hidden';
+        piece.style.background = window.getComputedStyle(node).backgroundColor || 'transparent';
+        piece.style.borderRadius = window.getComputedStyle(node).borderRadius || '0px';
+        piece.style.boxShadow = window.getComputedStyle(node).boxShadow || 'none';
+        piece.style.position = 'fixed';
+        piece.style.transformOrigin = 'center';
+        piece.style.touchAction = 'none';
+        piece.style.cursor = 'grab';
+        piece.style.userSelect = 'none';
+
+        const clone = node.cloneNode(true);
+        clone.removeAttribute('id');
+        clone.style.position = 'relative';
+        clone.style.left = `${-c * pieceW}px`;
+        clone.style.top = `${-r * pieceH}px`;
+        clone.style.margin = '0';
+        clone.style.width = `${rect.width}px`;
+        clone.style.height = `${rect.height}px`;
+
+        clone.querySelectorAll('a, button, input, textarea, select').forEach(el => {
+          el.removeAttribute('id');
+          el.removeAttribute('name');
+          el.disabled = true;
+          el.style.pointerEvents = 'none';
+        });
+
+        piece.appendChild(clone);
+
+        // initial physics state
+        const pObj = {
+          el: piece,
+          x: left,
+          y: top,
+          w: pieceW,
+          h: pieceH,
+          vx: (Math.random() - 0.5) * 400,
+          vy: (Math.random() - 0.5) * 400,
+          angle: (Math.random() - 0.5) * 0.8,
+          av: (Math.random() - 0.5) * 8,
+          dragging: false,
+          // for drag velocity estimation
+          lastPointerSamples: []
+        };
+
+        enablePieceDrag(pObj);
+        nodePieces.push(pObj);
+      }
+    }
+    return nodePieces;
+  }
+
+  function enablePieceDrag(p) {
+    const el = p.el;
+    // pointer state
+    let pointerId = null;
+    let offset = { x: 0, y: 0 };
+    let lastClient = null;
+
+    function samplePointer(clientX, clientY, t) {
+      p.lastPointerSamples.push({ x: clientX, y: clientY, t });
+      // keep only recent samples (200ms)
+      const cutoff = t - 0.2;
+      while (p.lastPointerSamples.length > 0 && p.lastPointerSamples[0].t < cutoff) {
+        p.lastPointerSamples.shift();
+      }
+    }
+
+    el.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      pointerId = e.pointerId;
+      el.setPointerCapture(pointerId);
+      p.dragging = true;
+      el.style.cursor = 'grabbing';
+      // compute offset between pointer and piece origin
+      const rect = el.getBoundingClientRect();
+      offset.x = e.clientX - rect.left;
+      offset.y = e.clientY - rect.top;
+      lastClient = { x: e.clientX, y: e.clientY, t: performance.now() / 1000 };
+      p.lastPointerSamples = [];
+      samplePointer(e.clientX, e.clientY, lastClient.t);
+      // while dragging, zero out velocities so physics doesn't fight
+      p.vx = 0;
+      p.vy = 0;
+      p.av = 0;
+    });
+
+    el.addEventListener('pointermove', (e) => {
+      if (!p.dragging || e.pointerId !== pointerId) return;
+      e.preventDefault();
+      const now = performance.now() / 1000;
+      const clientX = e.clientX;
+      const clientY = e.clientY;
+      // update piece position to follow pointer minus offset
+      p.x = clientX - offset.x;
+      p.y = clientY - offset.y;
+      // small rotation while dragging based on horizontal movement
+      if (lastClient) {
+        const dx = clientX - lastClient.x;
+        p.angle += dx * 0.002;
+      }
+      lastClient = { x: clientX, y: clientY, t: now };
+      samplePointer(clientX, clientY, now);
+      // apply transform immediately so it feels responsive
+      p.el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px) rotate(${p.angle}rad)`;
+      p.el.style.left = '0px';
+      p.el.style.top = '0px';
+      p.el.style.position = 'fixed';
+    });
+
+    function endDrag(e) {
+      if (!p.dragging) return;
+      const now = performance.now() / 1000;
+      // compute velocity from samples
+      const samples = p.lastPointerSamples;
+      if (samples.length >= 2) {
+        const first = samples[0];
+        const last = samples[samples.length - 1];
+        const dt = Math.max(0.001, last.t - first.t);
+        const vx = (last.x - first.x) / dt;
+        const vy = (last.y - first.y) / dt;
+        // apply to piece, scaled down a bit for stability
+        p.vx = vx * 0.9;
+        p.vy = vy * 0.9;
+        // angular velocity from last horizontal motion
+        p.av = (vx * 0.002) * (Math.random() - 0.5) * 6;
+      } else {
+        // small default impulse
+        p.vx = (Math.random() - 0.5) * 80;
+        p.vy = -Math.abs((Math.random() - 0.5) * 80);
+        p.av = (Math.random() - 0.5) * 4;
+      }
+      p.dragging = false;
+      p.lastPointerSamples = [];
+      el.style.cursor = 'grab';
+      if (pointerId !== null) {
+        try { el.releasePointerCapture(pointerId); } catch (err) {}
+        pointerId = null;
+      }
+    }
+
+    el.addEventListener('pointerup', endDrag);
+    el.addEventListener('pointercancel', endDrag);
+  }
+
+  function startRagdoll() {
+    if (overlay) return;
+    createOverlay();
+    const nodes = snapshotNodes();
+    pieces = [];
+    hiddenNodes = [];
+
+    nodes.forEach(node => {
+      const nodePieces = makePiecesForNode(node);
+      if (nodePieces.length === 0) return;
+      nodePieces.forEach(p => {
+        overlay.appendChild(p.el);
+        // ensure initial placement transform is applied
+        p.el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px) rotate(${p.angle}rad)`;
+        pieces.push(p);
+      });
+      hiddenNodes.push(node);
+      node.style.visibility = 'hidden';
+    });
+
+    lastViewport = { w: window.innerWidth, h: window.innerHeight, scrollY: window.scrollY };
+    lastScreenPos = { x: window.screenX || 0, y: window.screenY || 0 };
+
+    startScreenPoll();
+
+    if (resetBtn) resetBtn.style.display = '';
+    lastTime = performance.now();
+    rafId = requestAnimationFrame(step);
+  }
+
+  function step(now) {
+    const dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+
+    const floor = window.innerHeight;
+
+    for (let i = 0; i < pieces.length; i++) {
+      const p = pieces[i];
+      // skip physics while dragging
+      if (p.dragging) continue;
+
+      p.vy += GRAVITY * dt;
+      p.vx *= Math.pow(FRICTION, dt * 60);
+
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.angle += p.av * dt;
+
+      if (p.y + p.h > floor) {
+        p.y = floor - p.h;
+        if (Math.abs(p.vy) > 20) {
+          p.vy = -p.vy * BOUNCE;
+          p.vx *= 0.98;
+          p.av *= 0.9;
+        } else {
+          p.vy = -p.vy * (BOUNCE * 0.6);
+          p.vx *= 0.97;
+          p.av *= 0.9;
+          if (Math.abs(p.vy) < 6) p.vy = 0;
+        }
+      }
+
+      if (p.x < 0) {
+        p.x = 0;
+        p.vx = -p.vx * 0.8;
+      } else if (p.x + p.w > window.innerWidth) {
+        p.x = window.innerWidth - p.w;
+        p.vx = -p.vx * 0.8;
+      }
+
+      p.el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px) rotate(${p.angle}rad)`;
+      p.el.style.left = '0px';
+      p.el.style.top = '0px';
+      p.el.style.position = 'fixed';
+      p.el.style.width = `${p.w}px`;
+      p.el.style.height = `${p.h}px`;
+    }
+
+    rafId = requestAnimationFrame(step);
+  }
+
+  function stopRagdoll() {
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+  }
+
+  function resetRagdoll() {
+    stopRagdoll();
+    stopScreenPoll();
+    if (overlay) {
+      hiddenNodes.forEach(n => { n.style.visibility = ''; });
+      overlay.remove();
+      overlay = null;
+      pieces = [];
+      hiddenNodes = [];
+    }
+    if (resetBtn) resetBtn.style.display = 'none';
+  }
+
+  function applyViewportImpulse(dx, dy) {
+    if (!pieces || pieces.length === 0) return;
+    const scale = 8;
+    const impulseX = dx * scale;
+    const impulseY = dy * scale;
+    pieces.forEach(p => {
+      const areaFactor = Math.min(2, (p.w * p.h) / 4000 + 0.5);
+      const jitter = (Math.random() - 0.5) * 0.6;
+      p.vx += (impulseX * (0.2 + jitter)) / areaFactor;
+      p.vy += (impulseY * (0.2 + jitter)) / areaFactor;
+      p.av += (impulseX * 0.0015) * (Math.random() - 0.5);
+    });
+  }
+
+  let resizeTimeout = null;
+  function onViewportChange() {
+    if (!overlay) {
+      lastViewport = { w: window.innerWidth, h: window.innerHeight, scrollY: window.scrollY };
+      return;
+    }
+
+    const dx = window.innerWidth - lastViewport.w;
+    const dy = window.innerHeight - lastViewport.h;
+    const dScroll = window.scrollY - lastViewport.scrollY;
+
+    if (dx !== 0 || dy !== 0 || dScroll !== 0) {
+      const impulseX = dx;
+      const impulseY = dy + dScroll;
+      applyViewportImpulse(impulseX, impulseY);
+    }
+
+    if (resizeTimeout) clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+      lastViewport = { w: window.innerWidth, h: window.innerHeight, scrollY: window.scrollY };
+      resizeTimeout = null;
+    }, 80);
+  }
+
+  function startScreenPoll() {
+    if (screenPollInterval) return;
+    lastScreenPos = { x: window.screenX || 0, y: window.screenY || 0 };
+    screenPollInterval = setInterval(() => {
+      const sx = window.screenX || 0;
+      const sy = window.screenY || 0;
+      const dx = sx - lastScreenPos.x;
+      const dy = sy - lastScreenPos.y;
+      if (dx !== 0 || dy !== 0) {
+        applyViewportImpulse(dx * 0.8, dy * 0.8);
+        lastScreenPos.x = sx;
+        lastScreenPos.y = sy;
+      }
+    }, SCREEN_POLL_MS);
+  }
+
+  function stopScreenPoll() {
+    if (screenPollInterval) {
+      clearInterval(screenPollInterval);
+      screenPollInterval = null;
+    }
+  }
+
+  (function enableFooterDragImpulse() {
+    let dragging = false;
+    let lastClient = null;
+    const btn = whatsBtn;
+    if (!btn) return;
+    btn.style.touchAction = 'none';
+    btn.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      lastClient = { x: e.clientX, y: e.clientY };
+      btn.setPointerCapture(e.pointerId);
+    });
+    btn.addEventListener('pointermove', (e) => {
+      if (!dragging || !overlay) return;
+      const dx = e.clientX - lastClient.x;
+      const dy = e.clientY - lastClient.y;
+      applyViewportImpulse(dx * 0.6, dy * 0.6);
+      lastClient = { x: e.clientX, y: e.clientY };
+    });
+    btn.addEventListener('pointerup', () => { dragging = false; lastClient = null; });
+    btn.addEventListener('pointercancel', () => { dragging = false; lastClient = null; });
+  })();
+
+  window.addEventListener('resize', onViewportChange);
+  window.addEventListener('scroll', onViewportChange, { passive: true });
+
+  if (whatsBtn) whatsBtn.addEventListener('click', () => { if (!overlay) startRagdoll(); });
+  if (resetBtn) resetBtn.addEventListener('click', resetRagdoll);
+
+  window.addEventListener('beforeunload', resetRagdoll);
+})();
+</script>

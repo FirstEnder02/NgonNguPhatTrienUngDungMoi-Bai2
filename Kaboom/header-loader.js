@@ -1,6 +1,6 @@
 (async function loadHeader() {
   try {
-    const resp = await fetch('/partials/header.html', { cache: 'no-cache' });
+    const resp = await fetch('Kaboom/header.html', { cache: 'no-cache' });
     if (!resp.ok) throw new Error('Header fetch failed: ' + resp.status);
     const html = await resp.text();
     const container = document.getElementById('site-header');

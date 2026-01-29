@@ -1,16 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Posts Manager — Comments</title>
+  <link rel="stylesheet" href="Kaboom/shared.css" />
+</head>
+
 <body>
   <div id="site-header"></div>
+  <script src="Kaboom/header-loader.js"></script>
 
   <main>
     <h1>Comments</h1>
+
+    <form id="comment-form" onsubmit="return saveComment();">
+      <label for="comment_id_display" id="comment_id_label" style="display:none">ID</label>
+      <div id="comment_id_display" style="display:none">
+        <input id="comment_id_readonly" type="text" readonly
+              style="padding:6px 8px; border:1px solid #ccc; border-radius:4px; width:120px;" />
+      </div>
+
+      <label for="comment_text_edit">Text</label>
+      <input id="comment_text_edit" name="text" type="text" placeholder="Comment text" required />
+
+      <label for="comment_postid_edit">Post ID</label>
+      <input id="comment_postid_edit" name="postId" type="text" placeholder="Post ID" required />
+
+      <input type="submit" value="Save" />
+      <button type="button" id="clearCommentBtn">Clear</button>
+      <span id="comment-msg" class="error" aria-live="polite"></span>
+    </form>
+    <div id="comment-edit-panel" aria-hidden="true" style="margin-top:16px; display:none;">
+      <div><strong>Editing ID:</strong> <span id="edit_comment_id_display"></span></div>
+      <div style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <label>
+          Text
+          <input id="edit_comment_text" type="text" style="min-width:220px;" />
+        </label>
+        <label>
+          Post ID
+          <input id="edit_comment_postid" type="text" style="width:120px;" />
+        </label>
+        <button type="button" id="editCommentSaveBtn">Save Edit</button>
+        <button type="button" id="editCommentCancelBtn">Cancel</button>
+      </div>
+      <div id="edit-comment-msg" class="error" aria-live="polite" style="margin-top:6px;"></div>
+    </div>
     <table>
       <thead>
-        <tr><th>ID</th><th>Text</th><th>Post ID</th></tr>
+        <tr>
+          <th class="id">ID</th>
+          <th class="title">Text</th>
+          <th class="views">Post ID</th>
+          <th class="actions">Actions</th>
+        </tr>
       </thead>
       <tbody id="comments-table"></tbody>
     </table>
   </main>
 
   <script src="main.js"></script>
-  <script src="Kaboom/header-loader.js"></script>
-</body> 
+</body>
+</html>
