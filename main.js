@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:3000';
+const API_BASE = '';
 const POSTS_ENDPOINT = `${API_BASE}/posts`;
 const COMMENTS_ENDPOINT = `${API_BASE}/comments`;
 
@@ -481,7 +481,7 @@ function showCommentIdDisplay(show, idValue = '') {
 
 async function fetchProfile() {
   try {
-    const res = await fetch(`${API_BASE}/profile`);
+    const res = await fetch('/profile');
     if (!res.ok) throw new Error('Profile fetch failed: ' + res.status);
     return await res.json();
   } catch (err) {
