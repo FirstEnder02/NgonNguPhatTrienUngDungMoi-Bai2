@@ -28,9 +28,9 @@ https://github.com/nguyenthanhtunghutechsg/NNPTUD-S2/tree/20260126
 - Hiển thị các post xoá mềm và sử dụng gạch ngang (thay đổi cách hiển thị) cho các post đó
 - Thực hiện toàn bộ thao tác CRUD với comments
 
-Khởi chạy API trên port 3000:
+Khởi chạy API & server trên port 3000:
 npx json-server db.json
 
 Mở terminal mới
-Khởi chạy file trên địa chỉ 127.0.0.1:8080:
-npx http-server . -p 8080
+Tìm port server:
+node server.js

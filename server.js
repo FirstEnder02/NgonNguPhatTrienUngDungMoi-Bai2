@@ -48,7 +48,6 @@ const server = createServer(async (req, res) => {
   
   if (pathname === '/') pathname = '/Index.html';
 
-  // Try serving from /html folder first, then root
   const pathsToTry = [
     path.join(__dirname, 'html', pathname),
     path.join(__dirname, pathname)
@@ -72,8 +71,6 @@ const server = createServer(async (req, res) => {
     }
   }
   if (found) return;
-
-  // API Routes
   if (pathname === '/posts' || pathname.startsWith('/posts/')) {
     const parts = pathname.split('/').filter(Boolean);
     const id = parts[1];
