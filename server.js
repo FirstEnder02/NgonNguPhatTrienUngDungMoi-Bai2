@@ -1,5 +1,5 @@
 const { createServer } = require('http');
-const { readFileSync, existsSync, statSync } = require('fs');
+const { readFileSync, existsSync, statSync, writeFileSync } = require('fs');
 const path = require('path');
 
 const PORT = 5000;
@@ -20,7 +20,7 @@ const mimeTypes = {
 let db = JSON.parse(readFileSync('./db.json', 'utf-8'));
 
 function saveDb() {
-  require('fs').writeFileSync('./db.json', JSON.stringify(db, null, 2));
+  writeFileSync('./db.json', JSON.stringify(db, null, 2));
 }
 
 function sendJson(res, data, status = 200) {
@@ -44,11 +44,18 @@ function parseBody(req) {
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
-  const pathname = url.pathname;
+  let pathname = url.pathname;
   
-  // Serve static files first (files with extensions)
-  if (pathname !== '/' && path.extname(pathname)) {
-    const filePath = path.join(__dirname, pathname);
+  if (pathname === '/') pathname = '/Index.html';
+
+  // Try serving from /html folder first, then root
+  const pathsToTry = [
+    path.join(__dirname, 'html', pathname),
+    path.join(__dirname, pathname)
+  ];
+
+  let found = false;
+  for (const filePath of pathsToTry) {
     if (existsSync(filePath) && statSync(filePath).isFile()) {
       const ext = path.extname(filePath).toLowerCase();
       const contentType = mimeTypes[ext] || 'application/octet-stream';
@@ -59,15 +66,14 @@ const server = createServer(async (req, res) => {
           'Cache-Control': 'no-cache'
         });
         res.end(content);
-        return;
-      } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'text/plain' });
-        res.end('Server Error');
-        return;
-      }
+        found = true;
+        break;
+      } catch (err) {}
     }
   }
-  
+  if (found) return;
+
+  // API Routes
   if (pathname === '/posts' || pathname.startsWith('/posts/')) {
     const parts = pathname.split('/').filter(Boolean);
     const id = parts[1];
@@ -166,28 +172,8 @@ const server = createServer(async (req, res) => {
     return;
   }
   
-  let filePath = pathname === '/' ? '/Index.html' : pathname;
-  filePath = path.join(__dirname, filePath);
-  
-  if (existsSync(filePath) && statSync(filePath).isFile()) {
-    const ext = path.extname(filePath).toLowerCase();
-    const contentType = mimeTypes[ext] || 'application/octet-stream';
-    
-    try {
-      const content = readFileSync(filePath);
-      res.writeHead(200, { 
-        'Content-Type': contentType,
-        'Cache-Control': 'no-cache'
-      });
-      res.end(content);
-    } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'text/plain' });
-      res.end('Server Error');
-    }
-  } else {
-    res.writeHead(404, { 'Content-Type': 'text/plain' });
-    res.end('Not Found');
-  }
+  res.writeHead(404, { 'Content-Type': 'text/plain' });
+  res.end('Not Found');
 });
 
 server.listen(PORT, HOST, () => {

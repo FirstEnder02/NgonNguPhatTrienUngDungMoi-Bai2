@@ -70,6 +70,7 @@ async function patchPost(id, patchObj) {
 }
 
 async function softDeletePost(id) {
+  if (!confirm('Are you sure you want to delete this post?')) return;
   try {
     await patchPost(id, { isDeleted: true });
     await refreshAndRenderPosts();
@@ -277,6 +278,7 @@ async function patchComment(id, patchObj) {
 }
 
 async function softDeleteComment(id) {
+  if (!confirm('Are you sure you want to delete this comment?')) return;
   try {
     await patchComment(id, { isDeleted: true });
     await refreshAndRenderComments();

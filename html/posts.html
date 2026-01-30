@@ -4,12 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Posts Manager — Posts</title>
-  <link rel="stylesheet" href="Kaboom/shared.css">
+  <link rel="stylesheet" href="../Kaboom/shared.css">
 </head>
 
 <body>
   <div id="site-header"></div>
-  <script src="Kaboom/header-loader.js"></script>
+  <script src="../Kaboom/header-loader.js"></script>
 
   <main>
     <h1>Posts</h1>
@@ -21,7 +21,6 @@
       </div>
       <input id="id_edit" name="id" type="text" placeholder="New ID" style="display:none; padding:6px 8px; border:1px solid #ccc; border-radius:4px; width:120px;" />
 
-      <label for="title_txt">Title</label>
       <input id="title_txt" name="title" type="text" placeholder="Post title" required />
 
       <label for="views_txt">Views</label>
@@ -49,7 +48,7 @@
       <div id="edit-msg" class="error" aria-live="polite" style="margin-top:6px;"></div>
     </div>
 
-    <table>
+    <table style="width:100%">
       <thead>
         <tr>
           <th class="id">ID</th>
